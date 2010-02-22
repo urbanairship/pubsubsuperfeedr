@@ -1,4 +1,6 @@
 """Library for adding/removing feeds with Superfeedr's PubSubHubbub API"""
+import hashlib
+import hmac
 import httplib
 import urllib
 
@@ -36,13 +38,13 @@ class Superfeedr(object):
             "Authorization": "Basic %s" % auth_string,
             "User-Agent": self.user_agent
         }
-        conn = httplib.HTTPConnection("superfeedr.com")
+        conn = httplib.HTTPSConnection("superfeedr.com")
         conn.request("POST", "/hubbub", form_data, headers)
         response = conn.getresponse()
         return response
 
     def data_template_for_feed(self, feed_url, callback_url,
-            verify_token=None):
+            verify_token=None, secret=None):
         data = {
             "hub.mode": "",
             "hub.callback": callback_url,
@@ -50,18 +52,27 @@ class Superfeedr(object):
             "hub.verify": "sync",
             "hub.verify_token": verify_token or ""
         }
+        if secret:
+            data["hub.secret"] = secret
         return data
 
-    def add_feed(self, feed_url, callback_url, verify_token=None):
+    def add_feed(self, feed_url, callback_url, verify_token=None, secret=None):
         """Add feed_url to Superfeedr with callback_url."""
         data = self.data_template_for_feed(feed_url, callback_url,
-            verify_token)
+            verify_token, secret)
         data["hub.mode"] = "subscribe"
         self.post_to_superfeedr(data)
 
-    def remove_feed(self, feed_url, callback_url, verify_token=None):
+    def remove_feed(self, feed_url, callback_url, verify_token=None,
+            secret=None):
         """Remove feed_url from Superfeedr."""
         data = self.data_template_for_feed(feed_url, callback_url,
-            verify_token)
+            verify_token, secret)
         data["hub.mode"] = "unsubscribe"
         self.post_to_superfeedr(data)
+
+    def verify_secret(self, feed_secret, feed_data, header):
+        """Verify the hub secret."""
+        hmac_string = "sha1=%s" % hmac.new(str(feed_secret), feed_data,
+            hashlib.sha1).hexdigest()
+        return hmac_string == header

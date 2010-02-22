@@ -2,7 +2,7 @@ superfeedr
 ==========
 
 A simple library designed to make it easy to add and remove feeds from
-Superfeedr's PubSubHubbub API.
+Superfeedr's PubSubHubbub API.  Includes support for hub.secret.
 
 Credits
 -------

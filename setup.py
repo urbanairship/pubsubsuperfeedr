@@ -4,7 +4,7 @@ from setuptools import setup
 
 
 setup(name="pubsubsuperfeedr",
-      version="0.1",
+      version="0.2",
       description="Library for adding/removing feeds with Superfeedr's PubSubHubbub API",
       author="Michael Richardson",
       author_email="michael@mtrichardson.com",
