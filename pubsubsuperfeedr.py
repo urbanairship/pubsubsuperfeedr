@@ -1,4 +1,6 @@
 """Library for adding/removing feeds with Superfeedr's PubSubHubbub API"""
+__version__ = '0.2.0'
+
 import hashlib
 import hmac
 import httplib
@@ -12,7 +14,7 @@ class Superfeedr(object):
     def __init__(self, superfeedr_username, superfeedr_password,
             user_agent=None):
         if user_agent is None:
-            user_agent = "PythonSuperfeedr/0.1"
+            user_agent = "PubSubSuperfeedr/%s" % __version__
         self.superfeedr_username = superfeedr_username
         self.superfeedr_password = superfeedr_password
         self.user_agent = user_agent
