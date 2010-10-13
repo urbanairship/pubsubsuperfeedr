@@ -47,3 +47,14 @@ Verifying a secret (in Django):
 
     >>> sf.verify_secret("some_secret", request.raw_post_data, request.META.get("HTTP_X_HUB_SIGNATURE", ""))
     True
+
+Testing
+-------
+
+To run the tests, first make sure that `nose
+<http://code.google.com/p/python-nose/>`_ and
+`mox <http://code.google.com/p/pymox/>`_ are installed. Then:
+
+    $ nosetests
+
+And you're off an running.
