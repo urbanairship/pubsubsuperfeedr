@@ -30,6 +30,9 @@ class Superfeedr(object):
             return False
         return True
 
+    def _get_connection(self):
+        return httplib.HTTPSConnection("superfeedr.com")
+
     def post_to_superfeedr(self, data):
         """Communicates with Superfeedr's hubbub endpoint"""
         form_data = urllib.urlencode(data)
@@ -40,7 +43,7 @@ class Superfeedr(object):
             "Authorization": "Basic %s" % auth_string,
             "User-Agent": self.user_agent
         }
-        conn = httplib.HTTPSConnection("superfeedr.com")
+        conn = self._get_connection()
         conn.request("POST", "/hubbub", form_data, headers)
         response = conn.getresponse()
         return response
