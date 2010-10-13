@@ -1,0 +1,8 @@
+*.pyc
+.Python
+bin/
+build/
+include/
+dist/
+lib/
+pubsubsuperfeedr.egg-info/
