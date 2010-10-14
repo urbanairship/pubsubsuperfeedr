@@ -1,10 +1,27 @@
+import datetime
 import httplib
 import urllib
 import unittest
 
+import dateutil.tz
 import mox
 
 import pubsubsuperfeedr
+
+
+# From http://superfeedr.com/documentation#schema
+example_status_schema = """
+<status feed="http://domain.tld/feed.xml" xmlns="http://superfeedr.com/xmpp-pubsub-ext">
+     <http code="200">9718 bytes fetched in 1.462708s : 2 new entries.</http>
+     <next_fetch>2010-05-10T11:19:38-07:00</next_fetch>
+     <period>900</period>
+     <last_fetch>2010-05-10T11:10:38-07:00</last_fetch>
+     <last_parse>2010-05-10T11:17:19-07:00</last_parse>
+     <last_maintenance_at>2010-05-10T09:45:08-07:00</last_maintenance_at>
+     <entries_count_since_last_maintenance>5</entries_count_since_last_maintenance>
+     <tilte>Lorem Ipsum</tilte>
+</status>
+"""
 
 
 class TestPubSubSuperfeedr(unittest.TestCase):
@@ -81,3 +98,73 @@ class TestPubSubSuperfeedr(unittest.TestCase):
         hmac_header = "sha1=ea7283bf6f519ef24cec649451f43d223f6e2825"
         self.assertTrue(self.sf.verify_secret(self.secret, feed_data,
             hmac_header))
+
+    def test_parse_status_schema(self):
+        tzinfo = dateutil.tz.tzoffset(None, -25200)
+        expected_values = {
+            "feed_url": "http://domain.tld/feed.xml",
+            "status_code": 200,
+            "status_info": "9718 bytes fetched in 1.462708s : 2 new entries.",
+            "next_fetch": datetime.datetime(2010, 5, 10, 11, 19, 38,
+                tzinfo=tzinfo),
+            "last_fetch": datetime.datetime(2010, 5, 10, 11, 10, 38,
+                tzinfo=tzinfo),
+            "last_parse": datetime.datetime(2010, 5, 10, 11, 17, 19,
+                tzinfo=tzinfo),
+            "last_maintenance_at": datetime.datetime(2010, 5, 10, 9, 45, 8,
+                tzinfo=tzinfo),
+        }
+
+        self.assertEqual(self.sf.parse_status_schema(example_status_schema),
+            expected_values)
+
+    def test_get_status_of_feed(self):
+        self.mox.StubOutWithMock(self.sf, "post_to_superfeedr")
+
+        data = {
+            "hub.mode": "retrieve",
+            "hub.topic": self.feed_url
+        }
+
+        self.sf.post_to_superfeedr(data, method="GET").AndReturn(self.resp)
+        self.resp.read().AndReturn(example_status_schema)
+
+        tzinfo = dateutil.tz.tzoffset(None, -25200)
+        expected_values = {
+            "feed_url": "http://domain.tld/feed.xml",
+            "status_code": 200,
+            "status_info": "9718 bytes fetched in 1.462708s : 2 new entries.",
+            "next_fetch": datetime.datetime(2010, 5, 10, 11, 19, 38,
+                tzinfo=tzinfo),
+            "last_fetch": datetime.datetime(2010, 5, 10, 11, 10, 38,
+                tzinfo=tzinfo),
+            "last_parse": datetime.datetime(2010, 5, 10, 11, 17, 19,
+                tzinfo=tzinfo),
+            "last_maintenance_at": datetime.datetime(2010, 5, 10, 9, 45, 8,
+                tzinfo=tzinfo),
+        }
+
+        self.mox.ReplayAll()
+        status_data = self.sf.get_status_of_feed(self.feed_url)
+        self.mox.VerifyAll()
+
+        self.assertEqual(status_data, expected_values)
+
+    def test_get_status_of_untracked_feed(self):
+        self.mox.StubOutWithMock(self.sf, "post_to_superfeedr")
+
+        data = {
+            "hub.mode": "retrieve",
+            "hub.topic": self.feed_url
+        }
+
+        self.sf.post_to_superfeedr(data, method="GET").AndReturn(self.resp)
+        self.resp.read().AndReturn("")
+
+        expected_values = None
+
+        self.mox.ReplayAll()
+        status_data = self.sf.get_status_of_feed(self.feed_url)
+        self.mox.VerifyAll()
+
+        self.assertEqual(status_data, expected_values)

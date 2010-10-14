@@ -6,6 +6,9 @@ import hmac
 import httplib
 import urllib
 
+from xml.dom import minidom
+
+import dateutil.parser
 import feedparser
 
 
@@ -33,7 +36,7 @@ class Superfeedr(object):
     def _get_connection(self):
         return httplib.HTTPSConnection("superfeedr.com")
 
-    def post_to_superfeedr(self, data):
+    def post_to_superfeedr(self, data, method="POST"):
         """Communicates with Superfeedr's hubbub endpoint"""
         form_data = urllib.urlencode(data)
         auth_string = ('%s:%s' % (self.superfeedr_username,
@@ -44,7 +47,7 @@ class Superfeedr(object):
             "User-Agent": self.user_agent
         }
         conn = self._get_connection()
-        conn.request("POST", "/hubbub", form_data, headers)
+        conn.request(method, "/hubbub", form_data, headers)
         response = conn.getresponse()
         return response
 
@@ -81,3 +84,41 @@ class Superfeedr(object):
         hmac_string = "sha1=%s" % hmac.new(str(feed_secret), feed_data,
             hashlib.sha1).hexdigest()
         return hmac_string == header
+
+    def parse_status_schema(self, status_schema):
+        """Parses Superfeedr status schema and returns a dictionary"""
+        if not status_schema:
+            return None
+        dom = minidom.parseString(status_schema)
+        feed_url = dom.getElementsByTagName(
+            "status")[0].getAttribute("feed")
+        http_node = dom.getElementsByTagName("http")[0]
+        status_code = int(http_node.getAttribute("code"))
+        status_info = http_node.firstChild.nodeValue
+        next_fetch = dateutil.parser.parse(dom.getElementsByTagName(
+            "next_fetch")[0].firstChild.nodeValue)
+        last_fetch = dateutil.parser.parse(dom.getElementsByTagName(
+            "last_fetch")[0].firstChild.nodeValue)
+        last_parse = dateutil.parser.parse(dom.getElementsByTagName(
+            "last_parse")[0].firstChild.nodeValue)
+        last_maintenance_at = dateutil.parser.parse(dom.getElementsByTagName(
+            "last_maintenance_at")[0].firstChild.nodeValue)
+        return {
+            "feed_url": feed_url,
+            "status_code": status_code,
+            "status_info": status_info,
+            "next_fetch": next_fetch,
+            "last_fetch": last_fetch,
+            "last_parse": last_parse,
+            "last_maintenance_at": last_maintenance_at
+        }
+
+    def get_status_of_feed(self, feed_url):
+        """Return Superfeedr's status about a particular feed"""
+        data = {
+            "hub.mode": "retrieve",
+            "hub.topic": feed_url
+        }
+        response = self.post_to_superfeedr(data, method="GET")
+        status_schema = response.read()
+        return self.parse_status_schema(status_schema)
