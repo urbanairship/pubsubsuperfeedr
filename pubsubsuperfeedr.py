@@ -1,5 +1,5 @@
 """Library for adding/removing feeds with Superfeedr's PubSubHubbub API"""
-__version__ = '0.3.0'
+__version__ = '0.3.1'
 
 import hashlib
 import hmac
@@ -23,15 +23,29 @@ class Superfeedr(object):
         self.user_agent = user_agent
 
     def verify_feed_url(self, feed_url):
-        """Verify that feed_url has feed items.
+        """Verify that feed_url appears to be valid.
 
-        Returns False if there aren't feed items, True if there are.
+        This checks for the feedparser 'bozo' flag.
+        http://www.feedparser.org/docs/bozo.html
 
         """
         parsed_data = feedparser.parse(feed_url)
-        if not parsed_data.entries:
-            return False
-        return True
+        return not parsed_data.bozo
+
+    def verify_feed_url_with_message(self, feed_url):
+        """Verify that feed_url appears to be valid, and returns the problem
+
+        This checks for the feedparser 'bozo' flag, and returns a tuple of
+        (valid, reason). reason will be None if valid is True.
+        http://www.feedparser.org/docs/bozo.html
+
+        """
+        parsed_data = feedparser.parse(feed_url)
+        if not parsed_data.bozo:
+            return True, None
+        exc = parsed_data.bozo_exception
+        return False, "%s at line %d, column %d" % (
+            exc.getMessage(), exc.getLineNumber(), exc.getColumnNumber())
 
     def _get_connection(self):
         return httplib.HTTPSConnection("superfeedr.com")
