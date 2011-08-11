@@ -1,5 +1,5 @@
 """Library for adding/removing feeds with Superfeedr's PubSubHubbub API"""
-__version__ = '0.3.1'
+__version__ = '0.3.0'
 
 import hashlib
 import hmac
@@ -23,29 +23,15 @@ class Superfeedr(object):
         self.user_agent = user_agent
 
     def verify_feed_url(self, feed_url):
-        """Verify that feed_url appears to be valid.
+        """Verify that feed_url has feed items.
 
-        This checks for the feedparser 'bozo' flag.
-        http://www.feedparser.org/docs/bozo.html
-
-        """
-        parsed_data = feedparser.parse(feed_url)
-        return not parsed_data.bozo
-
-    def verify_feed_url_with_message(self, feed_url):
-        """Verify that feed_url appears to be valid, and returns the problem
-
-        This checks for the feedparser 'bozo' flag, and returns a tuple of
-        (valid, reason). reason will be None if valid is True.
-        http://www.feedparser.org/docs/bozo.html
+        Returns False if there aren't feed items, True if there are.
 
         """
         parsed_data = feedparser.parse(feed_url)
-        if not parsed_data.bozo:
-            return True, None
-        exc = parsed_data.bozo_exception
-        return False, "%s at line %d, column %d" % (
-            exc.getMessage(), exc.getLineNumber(), exc.getColumnNumber())
+        if not parsed_data.entries:
+            return False
+        return True
 
     def _get_connection(self):
         return httplib.HTTPSConnection("superfeedr.com")
@@ -83,7 +69,7 @@ class Superfeedr(object):
         data = self.data_template_for_feed(feed_url, callback_url,
             verify_token, secret)
         data["hub.mode"] = "subscribe"
-        self.post_to_superfeedr(data)
+        return self.post_to_superfeedr(data)
 
     def remove_feed(self, feed_url, callback_url, verify_token=None,
             secret=None):
@@ -91,7 +77,7 @@ class Superfeedr(object):
         data = self.data_template_for_feed(feed_url, callback_url,
             verify_token, secret)
         data["hub.mode"] = "unsubscribe"
-        self.post_to_superfeedr(data)
+        return self.post_to_superfeedr(data)
 
     def verify_secret(self, feed_secret, feed_data, header):
         """Verify the hub secret."""
