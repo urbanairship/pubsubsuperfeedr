@@ -4,7 +4,7 @@ from setuptools import setup
 
 
 setup(name="pubsubsuperfeedr",
-      version="0.3.0",
+      version="0.3.1",
       description="Library for working with Superfeedr's PubSubHubbub API",
       author="Urban Airship",
       author_email="contact@urbanairship.com",
