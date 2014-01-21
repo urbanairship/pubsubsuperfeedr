@@ -34,7 +34,7 @@ class Superfeedr(object):
         return True
 
     def _get_connection(self):
-        return httplib.HTTPSConnection("superfeedr.com")
+        return httplib.HTTPSConnection("push.superfeedr.com")
 
     def post_to_superfeedr(self, data, method="POST"):
         """Communicates with Superfeedr's hubbub endpoint"""
