@@ -1,12 +1,13 @@
+from __future__ import absolute_import
 import datetime
-import httplib
-import urllib
+import mock
+from six.moves import http_client
+from six.moves import urllib
 import unittest
 
 import dateutil.tz
-import mox
 
-import pubsubsuperfeedr
+from pubsubsuperfeedr import Superfeedr
 
 
 # From http://superfeedr.com/documentation#schema
@@ -21,45 +22,41 @@ example_status_schema = """
      <entries_count_since_last_maintenance>5</entries_count_since_last_maintenance>
      <tilte>Lorem Ipsum</tilte>
 </status>
-"""
+"""  # noqa
 
 
 class TestPubSubSuperfeedr(unittest.TestCase):
 
-    __metaclass__ = mox.MoxMetaTestBase
-
     def setUp(self):
-        self.mox = mox.Mox()
-        self.sf = pubsubsuperfeedr.Superfeedr("foo", "bar")
-        self.resp = self.mox.CreateMockAnything()
         self.feed_url = "http://example.com/feed"
         self.callback_url = "http://example.com/callback"
         self.secret = "my_secret"
         super(TestPubSubSuperfeedr, self).setUp()
 
-    def test_post_to_superfeedr(self):
-        self.mox.StubOutWithMock(self.sf, "_get_connection")
-        conn = self.mox.CreateMock(httplib.HTTPSConnection)
+    @mock.patch.object(Superfeedr, '_get_connection')
+    def test_post_to_superfeedr(self, get_conn_mock):
+        conn_mock = mock.Mock(spec=http_client.HTTPSConnection)
+        get_conn_mock.return_value = conn_mock
+
+        sf = Superfeedr("foo", "bar")
 
         data = {"foo": "bar"}
-        expected_post_data = urllib.urlencode(data)
+        expected_post_data = urllib.parse.urlencode(data)
         expected_headers = {
             "Content-Type": "application/x-www-form-urlencoded",
-            "Authorization": "Basic Zm9vOmJhcg==", # foo:bar in basic auth
-            "User-Agent": self.sf.user_agent
+            "Authorization": "Basic Zm9vOmJhcg==",  # foo:bar in basic auth
+            "User-Agent": sf.user_agent
         }
 
-        self.sf._get_connection().AndReturn(conn)
-        conn.request("POST", "/hubbub", expected_post_data, expected_headers)
-        conn.getresponse().AndReturn(self.resp)
+        sf.post_to_superfeedr(data)
+        conn_mock.request.assert_called_with(
+            "POST", "/hubbub", expected_post_data, expected_headers
+        )
+        conn_mock.getresponse.assert_called_with()
 
-        self.mox.ReplayAll()
-        self.sf.post_to_superfeedr(data)
-        self.mox.VerifyAll()
-
-    def test_add_feed(self):
-        self.mox.StubOutWithMock(self.sf, "post_to_superfeedr")
-
+    @mock.patch.object(Superfeedr, 'post_to_superfeedr')
+    def test_add_feed(self, post_mock):
+        sf = Superfeedr("foo", "bar")
         expected_data = {
             "hub.mode": "subscribe",
             "hub.callback": self.callback_url,
@@ -69,15 +66,12 @@ class TestPubSubSuperfeedr(unittest.TestCase):
             "hub.secret": self.secret
         }
 
-        self.sf.post_to_superfeedr(expected_data).AndReturn(self.resp)
+        sf.add_feed(self.feed_url, self.callback_url, secret=self.secret)
+        post_mock.assert_called_with(expected_data)
 
-        self.mox.ReplayAll()
-        self.sf.add_feed(self.feed_url, self.callback_url, secret=self.secret)
-        self.mox.VerifyAll()
-        
-    def test_remove_feed(self):
-        self.mox.StubOutWithMock(self.sf, "post_to_superfeedr")
-
+    @mock.patch.object(Superfeedr, 'post_to_superfeedr')
+    def test_remove_feed(self, post_mock):
+        sf = Superfeedr("foo", "bar")
         expected_data = {
             "hub.mode": "unsubscribe",
             "hub.callback": self.callback_url,
@@ -87,47 +81,48 @@ class TestPubSubSuperfeedr(unittest.TestCase):
             "hub.secret": self.secret
         }
 
-        self.sf.post_to_superfeedr(expected_data).AndReturn(self.resp)
-
-        self.mox.ReplayAll()
-        self.sf.remove_feed(self.feed_url, self.callback_url, secret=self.secret)
-        self.mox.VerifyAll()
+        sf.remove_feed(self.feed_url, self.callback_url, secret=self.secret)
+        post_mock.assert_called_with(expected_data)
 
     def test_verify_secret(self):
+        sf = Superfeedr("foo", "bar")
         feed_data = "foobar!"
         hmac_header = "sha1=ea7283bf6f519ef24cec649451f43d223f6e2825"
-        self.assertTrue(self.sf.verify_secret(self.secret, feed_data,
-            hmac_header))
+        self.assertTrue(sf.verify_secret(self.secret, feed_data,
+                                         hmac_header))
 
     def test_parse_status_schema(self):
+        sf = Superfeedr("foo", "bar")
         tzinfo = dateutil.tz.tzoffset(None, -25200)
         expected_values = {
             "feed_url": "http://domain.tld/feed.xml",
             "status_code": 200,
             "status_info": "9718 bytes fetched in 1.462708s : 2 new entries.",
             "next_fetch": datetime.datetime(2010, 5, 10, 11, 19, 38,
-                tzinfo=tzinfo),
+                                            tzinfo=tzinfo),
             "last_fetch": datetime.datetime(2010, 5, 10, 11, 10, 38,
-                tzinfo=tzinfo),
+                                            tzinfo=tzinfo),
             "last_parse": datetime.datetime(2010, 5, 10, 11, 17, 19,
-                tzinfo=tzinfo),
+                                            tzinfo=tzinfo),
             "last_maintenance_at": datetime.datetime(2010, 5, 10, 9, 45, 8,
-                tzinfo=tzinfo),
+                                                     tzinfo=tzinfo),
         }
 
-        self.assertEqual(self.sf.parse_status_schema(example_status_schema),
-            expected_values)
+        self.assertEqual(sf.parse_status_schema(example_status_schema),
+                         expected_values)
 
-    def test_get_status_of_feed(self):
-        self.mox.StubOutWithMock(self.sf, "post_to_superfeedr")
+    @mock.patch.object(Superfeedr, 'post_to_superfeedr')
+    def test_get_status_of_feed(self, post_mock):
+        resp = mock.Mock()
+        resp.read.return_value = example_status_schema
+        post_mock.return_value = resp
+
+        sf = Superfeedr("foo", "bar")
 
         data = {
             "hub.mode": "retrieve",
             "hub.topic": self.feed_url
         }
-
-        self.sf.post_to_superfeedr(data, method="GET").AndReturn(self.resp)
-        self.resp.read().AndReturn(example_status_schema)
 
         tzinfo = dateutil.tz.tzoffset(None, -25200)
         expected_values = {
@@ -135,36 +130,36 @@ class TestPubSubSuperfeedr(unittest.TestCase):
             "status_code": 200,
             "status_info": "9718 bytes fetched in 1.462708s : 2 new entries.",
             "next_fetch": datetime.datetime(2010, 5, 10, 11, 19, 38,
-                tzinfo=tzinfo),
+                                            tzinfo=tzinfo),
             "last_fetch": datetime.datetime(2010, 5, 10, 11, 10, 38,
-                tzinfo=tzinfo),
+                                            tzinfo=tzinfo),
             "last_parse": datetime.datetime(2010, 5, 10, 11, 17, 19,
-                tzinfo=tzinfo),
+                                            tzinfo=tzinfo),
             "last_maintenance_at": datetime.datetime(2010, 5, 10, 9, 45, 8,
-                tzinfo=tzinfo),
+                                                     tzinfo=tzinfo),
         }
 
-        self.mox.ReplayAll()
-        status_data = self.sf.get_status_of_feed(self.feed_url)
-        self.mox.VerifyAll()
+        status_data = sf.get_status_of_feed(self.feed_url)
 
         self.assertEqual(status_data, expected_values)
+        post_mock.assert_called_with(data, method="GET")
+        resp.read.assert_called_with()
 
-    def test_get_status_of_untracked_feed(self):
-        self.mox.StubOutWithMock(self.sf, "post_to_superfeedr")
+    @mock.patch.object(Superfeedr, 'post_to_superfeedr')
+    def test_get_status_of_untracked_feed(self, post_mock):
+        resp = mock.Mock()
+        resp.read.return_value = ""
+        post_mock.return_value = resp
+
+        sf = Superfeedr("foo", "bar")
 
         data = {
             "hub.mode": "retrieve",
             "hub.topic": self.feed_url
         }
 
-        self.sf.post_to_superfeedr(data, method="GET").AndReturn(self.resp)
-        self.resp.read().AndReturn("")
+        status_data = sf.get_status_of_feed(self.feed_url)
 
-        expected_values = None
-
-        self.mox.ReplayAll()
-        status_data = self.sf.get_status_of_feed(self.feed_url)
-        self.mox.VerifyAll()
-
-        self.assertEqual(status_data, expected_values)
+        self.assertIsNone(status_data)
+        post_mock.assert_called_with(data, method="GET")
+        resp.read.assert_called_with()

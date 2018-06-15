@@ -1,10 +1,12 @@
 """Library for adding/removing feeds with Superfeedr's PubSubHubbub API"""
-__version__ = '0.3.1'
+from __future__ import absolute_import
 
+from base64 import b64encode
 import hashlib
 import hmac
-import httplib
-import urllib
+import six
+from six.moves import http_client
+from six.moves import urllib
 
 from xml.dom import minidom
 
@@ -12,12 +14,15 @@ import dateutil.parser
 import feedparser
 
 
+__version__ = '0.3.2'
+
+
 class Superfeedr(object):
 
     def __init__(self, superfeedr_username, superfeedr_password,
-            user_agent=None):
+                 user_agent=None):
         if user_agent is None:
-            user_agent = "PubSubSuperfeedr/%s" % __version__
+            user_agent = "PubSubSuperfeedr/{}".format(__version__)
         self.superfeedr_username = superfeedr_username
         self.superfeedr_password = superfeedr_password
         self.user_agent = user_agent
@@ -34,16 +39,19 @@ class Superfeedr(object):
         return True
 
     def _get_connection(self):
-        return httplib.HTTPSConnection("push.superfeedr.com")
+        return http_client.HTTPSConnection("push.superfeedr.com")
 
     def post_to_superfeedr(self, data, method="POST"):
         """Communicates with Superfeedr's hubbub endpoint"""
-        form_data = urllib.urlencode(data)
-        auth_string = ('%s:%s' % (self.superfeedr_username,
-            self.superfeedr_password)).encode("base64")[:-1]
+        form_data = urllib.parse.urlencode(data)
+        auth_string = "{username}:{password}".format(
+            username=self.superfeedr_username,
+            password=self.superfeedr_password,
+        )
+        auth_enc = b64encode(auth_string.encode('utf-8'))
         headers = {
             "Content-Type": "application/x-www-form-urlencoded",
-            "Authorization": "Basic %s" % auth_string,
+            "Authorization": "Basic {}".format(auth_enc.decode('ascii')),
             "User-Agent": self.user_agent
         }
         conn = self._get_connection()
@@ -52,7 +60,7 @@ class Superfeedr(object):
         return response
 
     def data_template_for_feed(self, feed_url, callback_url,
-            verify_token=None, secret=None):
+                               verify_token=None, secret=None):
         data = {
             "hub.mode": "",
             "hub.callback": callback_url,
@@ -67,22 +75,28 @@ class Superfeedr(object):
     def add_feed(self, feed_url, callback_url, verify_token=None, secret=None):
         """Add feed_url to Superfeedr with callback_url."""
         data = self.data_template_for_feed(feed_url, callback_url,
-            verify_token, secret)
+                                           verify_token, secret)
         data["hub.mode"] = "subscribe"
         return self.post_to_superfeedr(data)
 
     def remove_feed(self, feed_url, callback_url, verify_token=None,
-            secret=None):
+                    secret=None):
         """Remove feed_url from Superfeedr."""
         data = self.data_template_for_feed(feed_url, callback_url,
-            verify_token, secret)
+                                           verify_token, secret)
         data["hub.mode"] = "unsubscribe"
         return self.post_to_superfeedr(data)
 
     def verify_secret(self, feed_secret, feed_data, header):
         """Verify the hub secret."""
-        hmac_string = "sha1=%s" % hmac.new(str(feed_secret), feed_data,
-            hashlib.sha1).hexdigest()
+        if isinstance(feed_secret, six.text_type):
+            feed_secret = feed_secret.encode('utf-8')
+        if isinstance(feed_data, six.text_type):
+            feed_data = feed_data.encode('utf-8')
+
+        sha1 = hmac.new(feed_secret, feed_data,
+                        hashlib.sha1).hexdigest()
+        hmac_string = "sha1={}".format(sha1)
         return hmac_string == header
 
     def parse_status_schema(self, status_schema):
